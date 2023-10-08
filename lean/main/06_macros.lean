@@ -422,15 +422,23 @@ If you are familiar with macro systems in other languages like C you
 probably know about so called macro hygiene issues already.
 A hygiene issue is when a macro introduces an identifier that collides with an
 identifier from some syntax that it is including. For example:
+
+他の言語のマクロシステム、たとえばCの場合、おそらく「マクロの衛生状態」と呼ばれる問題について
+既に知っているかもしれません。
+衛生問題とは、マクロが、それが含んでいる構文の識別子と衝突する識別子を導入するときのことです。
+たとえば：
 -/
 
 -- Applying this macro produces a function that binds a new identifier `x`.
+-- マクロを適用すると、新しい識別子`x`をバインドする関数が生成されます。
 macro "const" e:term : term => `(fun x => $e)
 
 -- But `x` can also be defined by a user
+-- しかし、`x`はユーザーによっても定義されています。
 def x : Nat := 42
 
 -- Which `x` should be used by the compiler in place of `$e`?
+-- コンパイラは`$e`の代わりにどの`x`を使用すべきですか？
 #eval (const x) 10 -- 42
 
 /-
@@ -448,11 +456,30 @@ is invoked, a new macro scope (basically a unique number) is added to
 a list of all the macro scopes that are active right now. When the current
 macro introduces a new identifier what is actually getting added is an
 identifier of the form:
+
+マクロがシンタクティックな変換のみを実行するという事実を考えると
+上記の`eval`が42ではなく10を返すことを期待するかもしれません。
+結局のところ、結果の構文は`(fun x => x) 10`であるべきです。
+これはもちろん、著者の意図ではありませんでしたが、
+これはCのようなより原始的なマクロシステムでは起こることです。
+では、Leanはどのようにしてこれらの衛生問題を回避しているのでしょうか？
+優れた[Beyond Notations](https://lmcs.episciences.org/9362/pdf)論文では、
+Leanでのアイデアと実装について詳しく説明しています。
+私たちは、実際の使用にはあまり興味がないので、このトピックの概要を説明します。
+Beyond Notationsで説明されているアイデアは、
+「マクロスコープ」と呼ばれる概念にまで遡ります。
+新しいマクロが呼び出されるたびに、
+現在アクティブなすべてのマクロスコープのリストに新しいマクロスコープ（基本的には一意の数値）が追加されます。
+現在のマクロが新しい識別子を導入するとき、
+実際に追加されるのは次の形式の識別子です。
 ```
 <actual name>._@.(<module_name>.<scopes>)*.<module_name>._hyg.<scopes>
 ```
 For example, if the module name is `Init.Data.List.Basic`, the name is
 `foo.bla`, and macros scopes are [2, 5] we get:
+
+例えば、モジュール名が`Init.Data.List.Basic`で、名前が`foo.bla`で、
+マクロスコープが[2, 5]の場合、
 ```
 foo.bla._@.Init.Data.List.Basic._hyg.2.5
 ```
@@ -460,20 +487,37 @@ Since macro scopes are unique numbers the list of macro scopes appended in the e
 of the name will always be unique across all macro invocations, hence macro hygiene
 issues like the ones above are not possible.
 
+マクロのスコープは固有の番号であるため、名前の最後に追加されるマクロスコープのリストは、
+すべてのマクロ呼び出しにわたって常に一意であります。
+したがって、上記のようなマクロハイジーンの問題は発生しません。
+
 If you are wondering why there is more than just the macro scopes to this
 name generation, that is because we may have to combine scopes from different files/modules.
 The main module being processed is always the right most one.
 This situation may happen when we execute a macro generated in a file
 imported in the current file.
+
+もし、この名前生成にマクロスコープ以上のものがなぜ存在するのか疑問に思っているなら、
+それは、異なるファイル/モジュールからスコープを組み合わせる必要があるかもしれないからです。
+処理されるメインモジュールは常に最も右側にあります。
+この状況は、現在のファイルにインポートされたファイルで生成されたマクロを実行するときに発生する可能性があります。
+
 ```
 foo.bla._@.Init.Data.List.Basic.2.1.Init.Lean.Expr_hyg.4
 ```
 The delimiter `_hyg` at the end is used just to improve performance of
 the function `Lean.Name.hasMacroScopes` -- the format could also work without it.
 
+末尾のデリミタ`_hyg`は、関数`Lean.Name.hasMacroScopes`の性能を向上させるためだけに使用されます
+ -- このフォーマットは、それなしでも動作します。
+
 This was a lot of technical details. You do not have to understand them
 in order to use macros, if you want you can just keep in mind that Lean
 will not allow name clashes like the one in the `const` example.
+
+これは多くの技術的な詳細です。
+マクロを使用するためにこれらを理解する必要はありません。
+もし望むなら、`const`の例のような名前の衝突はLeanが許可しないことを心に留めておくことができます。
 
 Note that this extends to *all* names that are introduced using syntax
 quotations, that is if you write a macro that produces:
@@ -482,6 +526,16 @@ because the name will subject to hygiene. Luckily there is a way to
 circumvent this. You can use `mkIdent` to generate a raw identifier,
 for example: `` `(def $(mkIdent `foo) := 1) ``. In this case it won't
 be subject to hygiene and accessible to the user.
+
+これは、構文の引用を使用して導入される*すべて*の名前に拡張されることに注意してください。
+つまり、次のようなマクロを書く場合：`` `(def foo := 1) ``、
+ユーザーは`foo`にアクセスできません。
+なぜなら、その名前は衛生状態になるからです。
+幸いなことに、これを回避する方法があります。
+`mkIdent`を使用して生の識別子を生成することができます。
+たとえば：`` `(def $(mkIdent `foo) := 1) ``。
+この場合、衛生状態にならず、ユーザーがアクセスできます。
+
 
 ## `MonadQuotation` and `MonadRef`
 Based on this description of the hygiene mechanism one interesting
@@ -492,18 +546,39 @@ As is quite common in functional programming, as soon as we start
 having some additional state that we need to bookkeep (like the macro scopes)
 this is done with a monad, this is the case here as well with a slight twist.
 
+このハイジーンメカニズムの説明に基づいて、面白い質問が一つ浮かびます。
+実際には、現在のマクロスコープのリストが何であるかを私たちはどう知っているのでしょうか？
+結局のところ、上記で定義されたマクロ関数では、
+スコープの明示的な渡しは何も起こりません。
+関数型プログラミングでは非常に一般的ですが、
+（マクロスコープのように）ブックキープする必要のある追加の状態があるとすぐに、
+モナドを使用してこれを行います。
+ここでも、少し変わった形で行われています。
+
 Instead of implementing this for only a single monad `MacroM` the general
 concept of keeping track of macro scopes in monadic way is abstracted
 away using a type class called `MonadQuotation`. This allows any other
 monad to also easily provide this hygienic `Syntax` creation mechanism
 by simply implementing this type class.
 
+`MacroM`の単一のモナドに対してのみこれを実装する代わりに、
+マクロスコープをモナド的な方法で追跡する一般的な概念は、
+`MonadQuotation`と呼ばれる型クラスを使用して抽象化されます。
+これにより、他のどのモナドでも、この衛生的な`Syntax`作成メカニズムを簡単に提供できます。
+単にこの型クラスを実装するだけです。
+
 This is also the reason that while we are able to use pattern matching on syntax
 with `` `(syntax) `` we cannot just create `Syntax` with the same
 syntax in pure functions: there is no `Monad` implementing `MonadQuotation`
 involved in order to keep track of the macro scopes.
 
+これはまた、`` `(syntax) ``で構文をパターンマッチングできる一方で、
+純粋な関数で同じ構文で`Syntax`を作成することはできない理由でもあります。
+マクロスコープを追跡するために`MonadQuotation`を実装する`Monad`が関与していないからです。
+
 Now let's take a brief look at the `MonadQuotation` type class:
+
+さて、`MonadQuotation`型クラスを簡単に見てみましょう。
 -/
 
 namespace Playground
@@ -527,8 +602,16 @@ to the `Monad` typeclass which
 - can evaluate a certain monadic action `m α` with a new reference to a `Syntax`
   using `withRef`
 
+`MonadQuotation`は`MonadRef`に基づいているので、まずは`MonadRef`を見てみましょう。
+ここでのアイデアは非常に単純です。
+`MonadRef`は、`Monad`型クラスの拡張として見られることを意図しています。
+- `getRef`で`Syntax`値への参照を得る
+- `withRef`を使用して、新しい`Syntax`への参照である特定のモナドアクション`m α`を評価する
+
 On it's own `MonadRef` isn't exactly interesting, but once it is combined with
 `MonadQuotation` it makes sense.
+
+`MonadRef`自体はあまり興味深くありませんが、`MonadQuotation`と組み合わせると意味があります。
 
 As you can see `MonadQuotation` extends `MonadRef` and adds 3 new functions:
 - `getCurrMacroScope` which obtains the latest `MacroScope` that was created
@@ -541,6 +624,16 @@ As you can see `MonadQuotation` extends `MonadRef` and adds 3 new functions:
   make sense to use this in our own macros, for example when we are generating
   some syntax block repeatedly and want to avoid name clashes.
 
+見ての通り、`MonadQuotation`は`MonadRef`を拡張し、3つの新しい関数を追加します：
+- `getCurrMacroScope`は、作成された最新の`MacroScope`を取得します。
+- `getMainModule`は（明らかに）メインモジュールの名前を取得します。
+  これらは、上記で説明した衛生的な識別子を作成するために使用されます。
+- `withFreshMacroScope`は、次のマクロスコープを計算し、
+  この新しいマクロスコープで構文引用を実行する計算`m α`を実行します。
+  これは、新しいマクロ呼び出しが発生するたびに内部で使用することを意図していますが、
+  自分自身のマクロでこれを使用することもあります。
+  たとえば、何度も構文ブロックを生成し、名前の衝突を避けたい場合などです。
+
 How `MonadRef` comes into play here is that Lean requires a way to indicate
 errors at certain positions to the user. One thing that wasn't introduced
 in the `Syntax` chapter is that values of type `Syntax` actually carry their
@@ -550,7 +643,19 @@ What Lean will do when using `withFreshMacroScope` is to apply the position of
 the result of `getRef` to each introduced symbol, which then results in better
 error positions than not applying any position.
 
+ここで`MonadRef`がどのように関与するかというと、
+Leanはユーザーに対して特定の位置でエラーを指摘する方法を必要とします。
+`Syntax`の章で紹介されていないことの1つは、
+`Syntax`型の値がファイル内の位置を持っているということです。
+エラーが検出されると、通常は`Syntax`値にバインドされ、
+Leanにエラーをファイル内のどこに指摘するかを伝えます。
+`withFreshMacroScope`を使用すると、
+導入された各シンボルに`getRef`の結果の位置を適用します。
+これにより、位置を適用しない場合よりも良いエラー位置が得られます。
+
 To see error positioning in action, we can write a little macro that makes use of it:
+
+エラー位置を確認するために、それを利用する小さなマクロを書いてみましょう。
 -/
 
 syntax "error_position" ident : term
@@ -559,6 +664,9 @@ macro_rules
   | `(error_position all) => Macro.throwError "Ahhh"
   -- the `%$tk` syntax gives us the Syntax of the thing before the %,
   -- in this case `error_position`, giving it the name `tk`
+
+  -- `%$tk`構文は、`%`の前のものの構文を与えてくれます。
+  -- この場合は`error_position`で、名前は`tk`です。
   | `(error_position%$tk first) => withRef tk (Macro.throwError "Ahhh")
 
 #eval error_position all -- the error is indicated at `error_position all`
@@ -568,10 +676,16 @@ macro_rules
 Obviously controlling the positions of errors in this way is quite important
 for a good user experience.
 
+明らかに、この方法でエラーの位置を制御することは、良いユーザー体験にとって非常に重要です。
+
 ## Mini project
 As a final mini project for this section we will re-build the arithmetic
 DSL from the syntax chapter in a slightly more advanced way, using a macro
 this time so we can actually fully integrate it into the Lean syntax.
+
+このセクションの最後のミニプロジェクトとして、
+構文の章で構築した算術DSLを、今回はマクロを使用して、
+Lean構文に完全に統合できるように、少し高度な方法で再構築します。
 -/
 declare_syntax_cat arith
 
@@ -596,6 +710,15 @@ as an inductive, you could then write a function that takes some form of
 variable assignment and evaluates the given expression for this
 assignment. You could also try to embed arbitrary `term`s into your
 arith language using some special syntax or whatever else comes to your mind.
+
+もちろん、自由に試して遊んでみてください。
+変数を含む式などのより複雑なものを構築したい場合は、
+代わりにマクロを使用して帰納的な型を構築することを検討してください。
+算術式の項を帰納的なものとして取得したら、
+何らかの形の変数割り当てを取り、
+この割り当てに対して与えられた式を評価する関数を書くことができます。
+また、特別な構文や他の思いつくものを使用して、
+任意の`term`をあなたの算術言語に埋め込むこともできます。
 -/
 
 /-!
@@ -603,17 +726,22 @@ arith language using some special syntax or whatever else comes to your mind.
 ### Binders 2.0
 As promised in the syntax chapter here is Binders 2.0. We'll start by
 reintroducing our theory of sets:
+
+構文の章で約束したように、ここでBinders 2.0を紹介します。
+まず、集合の理論を再導入します。
 -/
 def Set (α : Type u) := α → Prop
 def Set.mem (x : α) (X : Set α) : Prop := X x
 
 -- Integrate into the already existing typeclass for membership notation
+-- 既存のメンバーシップ表記の型クラスに統合する
 instance : Membership α (Set α) where
   mem := Set.mem
 
 def Set.empty : Set α := λ _ => False
 
 -- the basic "all elements such that" function for the notation
+-- 構文のための基本的な「すべての要素は」関数
 def setOf {α : Type} (p : α → Prop) : Set α := p
 
 /-!
@@ -624,7 +752,15 @@ and `{x ∈ X, p x}` notations. In principle there are two ways to do this:
    binder constructs such as `Σ` or `Π` as well and implement macros for
    the `{ | }` case
 
+この章のゴールは、`{x : X | p x}`と`{x ∈ X, p x}`の両方の表記を許可することです。
+原理的には、2つの方法があります。
+1. 変数をバインドする方法ごとに、構文とマクロを定義する
+2. `Σ`や`Π`などの他のバインダー構成で再利用できるバインダーの構文カテゴリを定義し、
+   `{ | }`の場合のマクロを実装する
+
 In this section we will use approach 2 because it is more easily reusable.
+
+このセクションでは、再利用性が高いため、アプローチ2を使用します。
 -/
 
 declare_syntax_cat binder_construct
@@ -632,12 +768,16 @@ syntax "{" binder_construct "|" term "}" : term
 
 /-!
 Now let's define the two binders constructs we are interested in:
+
+さて、興味のある2つのバインダー構成を定義しましょう。
 -/
 syntax ident " : " term : binder_construct
 syntax ident " ∈ " term : binder_construct
 
 /-!
 And finally the macros to expand our syntax:
+
+最後に、構文を展開するマクロです。
 -/
 
 macro_rules
