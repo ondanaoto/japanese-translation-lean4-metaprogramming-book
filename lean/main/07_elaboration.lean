@@ -8,6 +8,13 @@ there are also other use cases such as `#check` or `#eval`. Hence the
 elaborator is quite a large piece of code, it lives
 [here](https://github.com/leanprover/lean4/blob/master/src/Lean/Elab).
 
+エラボレータは、ユーザー向けの`Syntax`を
+コンパイラの残りの部分が作業できる何かに変換する責任を持つコンポーネントです。
+ほとんどの場合、これは`Syntax`を`Expr`に変換することを意味しますが、
+`#check`や`#eval`などの他のユースケースもあります。したがって、
+エラボレータはかなり大きなコードの塊です。
+[ここ](https://github.com/leanprover/lean4/blob/master/src/Lean/Elab)にあります.
+
 ## Command elaboration
 A command is the highest level of `Syntax`, a Lean file is made
 up of a list of commands. The most commonly used commands are declarations,
@@ -16,13 +23,26 @@ for example:
 - `inductive`
 - `structure`
 
+コマンドは`Syntax`の最上位レベルであり、Leanファイルはコマンドのリストで構成されています。
+最も一般的に使用されるコマンドは、たとえば次のとおりです。
+- `def`
+- `inductive`
+- `structure`
+
 but there are also other ones, most notably `#check`, `#eval` and friends.
 All commands live in the `command` syntax category so in order to declare
 custom commands, their syntax has to be registered in that category.
 
+しかし、`#check`、`#eval`など、他にも注目すべきコマンドがあります。
+すべてのコマンドは`command`構文カテゴリに存在するため、カスタムコマンドを宣言するためには、
+その構文がそのカテゴリに登録されていなければなりません。
+
 ### Giving meaning to commands
 The next step is giving some semantics to the syntax. With commands, this
 is done by registering a so called command elaborator.
+
+次のステップは、構文にいくつかのセマンティクスを与えることです。
+コマンドについては、いわゆるコマンドエラボレータを登録することによってこれが行われます。
 
 Command elaborators have type `CommandElab` which is an alias for:
 `Syntax → CommandElabM Unit`. What they do, is take the `Syntax` that
@@ -46,6 +66,26 @@ side effects:
 4. Throwing errors, since it can run any kind of `IO`, it is only natural
    that it can throw errors via `throwError`.
 
+コマンドエラボレータは、`CommandElab`タイプを持ち、
+これは`Syntax → CommandElabM Unit`のエイリアスです。
+彼らがやることは、ユーザーがコマンドを呼び出すことを望むものを表す`Syntax`を取り、
+`CommandElabM`モナドに何らかのサイドエフェクトを生成することです。
+結局のところ、返り値は常に`Unit`です。
+`CommandElabM`モナドには4つの主要なサイドエフェクトがあります：
+1. `#check`のように、`MonadLog`と`AddMessageContext`を介して、
+   ユーザーにメッセージを記録する。これは、`Lean.Elab.Log`で見つけることができる関数を介して行われる。
+   最も注目すべきものは、`logInfo`、`logWarning`、`logError`です。
+2. `MonadEnv`を介して`Environment`と対話する。
+    これは、コンパイラのためのすべての関連情報が格納されている場所であり、
+    すべての既知の宣言、その型、ドキュメント文字列、値などです。
+    現在の環境は`getEnv`を介して取得でき、変更された後に`setEnv`を介して設定できます。
+    `setEnv`のようなラッパーを使用することが、
+    `Environment`に情報を追加する正しい方法であることに注意してください。
+3. `IO`を実行することで、`CommandElabM`は任意の`IO`操作を実行できます。
+    たとえば、ファイルから読み取り、その内容に基づいて宣言を行うことができます。
+4. エラーをスローすることができます。
+    任意の種類の`IO`を実行できるので、`throwError`を介してエラーをスローできるのは当然のことです。
+
 Furthermore there are a bunch of other `Monad` extensions that are supported
 by `CommandElabM`:
 - `MonadRef` and `MonadQuotation` for `Syntax` quotations like in macros
@@ -53,6 +93,13 @@ by `CommandElabM`:
 - `MonadTrace` for debug trace information
 - TODO: There are a few others though I'm not sure whether they are relevant,
   see the instance in `Lean.Elab.Command`
+
+さらに、`CommandElabM`がサポートする他のいくつかの`Monad`拡張があります：
+- マクロのような`Syntax`引用のための`MonadRef`および`MonadQuotation`
+- オプションフレームワークと対話するための`MonadOptions`
+- デバッグトレース情報のための`MonadTrace`
+- TODO：他にもいくつかありますが、それらが関連しているかどうかはわかりません。
+  `Lean.Elab.Command`でインスタンスを参照してください。
 
 ### Command elaboration
 Now that we understand the type of command elaborators let's take a brief
