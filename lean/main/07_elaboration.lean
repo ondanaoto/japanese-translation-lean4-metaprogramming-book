@@ -118,6 +118,18 @@ look at how the elaboration process actually works:
    elaborator is found, then the command elaboration is aborted with an `unexpected syntax`
    error message.
 
+コマンドエラボレータのタイプを理解したところで、
+実際のエラボレーションプロセスがどのように機能するのかを簡単に見てみましょう：
+1. 現在の`Syntax`に適用できるマクロがあるかどうかを確認します。
+   適用可能でエラーをスローしないマクロがある場合、結果の`Syntax`は再度コマンドとして再帰的にエラボレートされます。
+2. マクロが適用できない場合、エラボレートしている`Syntax`の`SyntaxKind`に登録されているすべての`CommandElab`を、
+    `command_elab`属性を使用して検索します。
+3. これらの`CommandElab`は、次のいずれかが`unsupportedSyntaxException`をスローしないまで順番に試されます。
+    これはLeanがエラボレータがこの特定の`Syntax`構築物に"責任を感じる"ことを示す方法です。
+    ユーザーに何かが間違っていることを示すために、通常のエラーをスローすることはまだ可能です。
+    責任を持つエラボレータが見つからない場合、コマンドエラボレーションは
+    `unexpected syntax`エラーメッセージと共に中止されます。
+
 As you can see the general idea behind the procedure is quite similar to ordinary macro expansion.
 
 ### Making our own
