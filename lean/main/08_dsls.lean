@@ -49,15 +49,18 @@ inductive IMPLit
   | bool : Bool → IMPLit
 
 /- This is our only unary operator -/
+/- これが私たちの唯一の単項演算子です -/
 inductive IMPUnOp
   | not
 
 /- These are our binary operations. -/
+/- これらは私たちの二項演算です。 -/
 
 inductive IMPBinOp
   | and | add | less
 
 /- Now we define the expressions that we want to handle. -/
+/- これで、私たちが扱いたい式を定義します。 -/
 
 inductive IMPExpr
   | lit : IMPLit → IMPExpr
@@ -99,6 +102,9 @@ syntax "false"   : imp_lit
 def elabIMPLit : Syntax → MetaM Expr
   -- `mkAppM` creates an `Expr.app`, given the function `Name` and the args
   -- `mkNatLit` creates an `Expr` from a `Nat`
+
+  -- `mkAppM`は、関数`Name`と引数が与えられた`Expr.app`を作成します。
+  -- `mkNatLit`は`Nat`から`Expr`を作成します。
   | `(imp_lit| $n:num) => mkAppM ``IMPLit.nat  #[mkNatLit n.getNat]
   | `(imp_lit| true  ) => mkAppM ``IMPLit.bool #[.const ``Bool.true []]
   | `(imp_lit| false ) => mkAppM ``IMPLit.bool #[.const ``Bool.false []]
@@ -145,6 +151,7 @@ def elabIMPBinOp : Syntax → MetaM Expr
   | _ => throwUnsupportedSyntax
 
 /-Now we define the syntax for expressions: -/
+/-それでは式の構文を定義しましょう: -/
 
 declare_syntax_cat                   imp_expr
 syntax imp_lit                     : imp_expr
