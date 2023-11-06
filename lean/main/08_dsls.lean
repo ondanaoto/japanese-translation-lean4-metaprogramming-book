@@ -5,22 +5,39 @@ In this chapter we will learn how to use elaboration to build a DSL. We will not
 explore the full power of `MetaM`, and simply gesture at how to get access to
 this low-level machinery.
 
+この章では、エラボレーションを使用してDSLを構築する方法を学びます。
+`MetaM`の全ての機能を探求することはありませんが、この低レベルの機構へのアクセス方法を示唆します。
+
 More precisely, we shall enable Lean to understand the syntax of
 [IMP](http://concrete-semantics.org/concrete-semantics.pdf),
 which is a simple imperative language, often used for teaching operational and
-denotational semantics. 
+denotational semantics.
+
+より正確には、Leanが[IMP](http://concrete-semantics.org/concrete-semantics.pdf)
+の構文を理解できるようにします。
+IMPは、操作的および指示的セマンティクスの教育のためによく使用されるシンプルな命令型言語です。
 
 We are not going to define everything with the same encoding that the book does.
 For instance, the book defines arithmetic expressions and boolean expressions.
 We, will take a different path and just define generic expressions that take
 unary or binary operators.
 
+私たちは、その本が行うのと同じエンコーディングで全てを定義するわけではありません。
+例えば、その本では算術式やブール式を定義しています。
+私たちは異なるアプローチを取り、単項または二項演算子を取る一般的な式を定義するだけです。
+
 This means that we will allow weirdnesses like `1 + true`! But it will simplify
 the encoding, the grammar and consequently the metaprogramming didactic.
+
+これは、`1 + true`のような奇妙な式も許容することを意味します！
+しかし、これによりエンコーディングや文法が簡略化され、
+結果としてメタプログラミングの教育的側面も簡略化されます。
 
 ## Defining our AST
 
 We begin by defining our atomic literal value.
+
+まず、私たちは原子的なリテラル値を定義します。
 -/
 
 import Lean
@@ -51,6 +68,9 @@ inductive IMPExpr
 /-
 And finally the commands of our language. Let's follow the book and say that
 "each piece of a program is also a program":
+
+そして、私たちの言語のコマンドを最終的に定義します。
+本に従い、"プログラムの各部分もまたプログラムである"と言いましょう：
 -/
 
 inductive IMPProgram
@@ -66,6 +86,9 @@ inductive IMPProgram
 Now that we have our data types, let's elaborate terms of `Syntax` into
 terms of `Expr`. We begin by defining the syntax and an elaboration function for
 literals.
+
+データ型を持つようになったので、`Syntax`の項を`Expr`の項へと展開しましょう。
+リテラルのための構文と展開関数を定義することから始めます。
 -/
 
 declare_syntax_cat imp_lit
@@ -85,7 +108,7 @@ elab "test_elabIMPLit " l:imp_lit : term => elabIMPLit l
 
 #reduce test_elabIMPLit 4     -- IMPLit.nat 4
 #reduce test_elabIMPLit true  -- IMPLit.bool true
-#reduce test_elabIMPLit false -- IMPLit.bool true
+#reduce test_elabIMPLit false -- IMPLit.bool false
 
 /-
 ## Elaborating expressions
@@ -93,9 +116,15 @@ elab "test_elabIMPLit " l:imp_lit : term => elabIMPLit l
 In order to elaborate expressions, we also need a way to elaborate our unary and
 binary operators.
 
+式を展開するためには、単項演算子と二項演算子を展開する方法も必要です。
+
 Notice that these could very much be pure functions (`Syntax → Expr`), but we're
 staying in `MetaM` because it allows us to easily throw an error for match
-completion.-/
+completion.
+
+これらは純粋な関数（`Syntax → Expr`）である可能性があることに注意してください。
+しかし、`MetaM`にとどまっているのは、マッチングの完了のために簡単にエラーを投げることができるからです。
+-/
 
 declare_syntax_cat imp_unop
 syntax "not"     : imp_unop
@@ -126,6 +155,8 @@ syntax imp_expr imp_binop imp_expr : imp_expr
 /-
 Let's also allow parentheses so the IMP programmer can denote their parsing
 precedence.
+
+IMPプログラマが構文解析の優先順位を示すことができるように、括弧も許可しましょう。
 -/
 
 syntax "(" imp_expr ")" : imp_expr
@@ -135,6 +166,12 @@ Now we can elaborate our expressions. Note that expressions can be recursive.
 This means that our `elabIMPExpr` function will need to be recursive! We'll need
 to use `partial` because Lean can't prove the termination of `Syntax`
 consumption alone.
+
+これで私たちの式を具体化することができます。
+式は再帰的になることに注意してください。
+これは、私たちの`elabIMPExpr`関数も再帰的である必要があることを意味します！
+Leanは`Syntax`の消費だけで終了を証明することはできないので、
+`partial`を使用する必要があります。
 -/
 
 partial def elabIMPExpr : Syntax → MetaM Expr
@@ -170,6 +207,8 @@ elab "test_elabIMPExpr " e:imp_expr : term => elabIMPExpr e
 ## Elaborating programs
 
 And now we have everything we need to elaborate our IMP programs!
+
+そして、今、私たちのIMPプログラムを詳細化するために必要なすべてが揃いました！
 -/
 
 declare_syntax_cat           imp_program
@@ -205,6 +244,9 @@ partial def elabIMPProgram : Syntax → MetaM Expr
 /-
 And we can finally test our full elaboration pipeline. Let's use the following
 syntax:
+
+最後に、私たちの完全な詳細化パイプラインをテストすることができます。
+以下の構文を使用しましょう：
 -/
 
 elab ">>" p:imp_program "<<" : term => elabIMPProgram p
